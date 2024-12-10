@@ -2,89 +2,94 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-// Khai báo đối tượng LCD (địa chỉ 0x27 là địa chỉ phổ biến của LCD I2C)
+// Initialize LCD (address 0x27, 16 columns, 2 rows)
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 Servo Servo1;
 
 int servoPin = 9;
-int sensorPin = 2;
-int sensorPin1 = 3;
-int outputPin = 13;
-int angle = 0;
+int sensorPinIn = 4;
+int sensorPinOut = 5;
+int sensorPin[6] = {6, 7, 8, 10, 11, 12}; // Initialize sensor pins
+int outputPin = 13; // LED output
+
 byte customCharF[] = {
-  B11111,
-  B11111,
-  B11111,
-  B11111,
-  B11111,
-  B11111,
-  B11111,
-  B11111
-};
-byte customCharE[] = {
-  B11111,
-  B10001,
-  B10001,
-  B10001,
-  B10001,
-  B10001,
-  B10001,
-  B11111
+    B11111,
+    B11111,
+    B11111,
+    B11111,
+    B11111,
+    B11111,
+    B11111,
+    B11111
 };
 
+byte customCharE[] = {
+    B11111,
+    B10001,
+    B10001,
+    B10001,
+    B10001,
+    B10001,
+    B10001,
+    B11111
+};
 
 void setup() {
-  // Initialize the servo and the pins
-  Servo1.attach(servoPin);
-  pinMode(outputPin, OUTPUT);
-  pinMode(sensorPin, INPUT);
-  Serial.begin(9600);
-  //LCD setup
-   lcd.begin(16, 2);
-  lcd.backlight();
-  lcd.print("Kinh chao quy khach");
-  
+    // Initialize the servo and the pins
+    Servo1.attach(servoPin);
+    pinMode(sensorPinIn, INPUT);
+    pinMode(sensorPinOut, INPUT);
+
+    // Initialize sensor pins as input
+    for (int i = 0; i < 6; i++) {
+        pinMode(sensorPin[i], INPUT);
+    }
+
+    // LCD setup
+    lcd.begin(16, 2);
+    lcd.backlight();
+    lcd.setCursor(4, 0);
+    lcd.print("Welcome!");
+    delay(2000); // Wait for 2 seconds
+}
+
+void checkSlot() {
+    // Create the custom characters once
+    lcd.createChar(0, customCharF); // Occupied slot
+    lcd.createChar(1, customCharE); // Free slot
+
+    // Loop through all slots and update their status on the LCD
+    for (int i = 0; i < 6; i++) {
+        int sensorValue = digitalRead(sensorPin[i]);
+        lcd.setCursor(i + 4 , 1); // Set cursor to the corresponding column for each slot
+
+        if (sensorValue == LOW) {
+            lcd.write(0); // Display occupied character
+        } else {
+            lcd.write(1); // Display free character
+        }
+    }
 }
 
 void loop() {
-  // Read the sensor value
-  int sensorValue = digitalRead(sensorPin);
-  int sensor1Value = digitalRead(sensorPin1);
-  // Log the sensor value to the Serial Monitor
-  Serial.print("SensorPin Value: ");
-  Serial.println(sensorValue);
-  
-  // Check if object is detected (LOW means object detected)
-  if (sensorValue == LOW) {
-    // Turn on the LED (green)
-    digitalWrite(outputPin, HIGH);
-    
-    // Move the servo to 90 degrees
-    Servo1.write(90);
-    
-    // Log the angle to the Serial Monitor (optional)
-    Serial.println("Object detected! Servo turned to 90 degrees.");
-  } else {
-    // Turn off the LED (turn off green LED)
-    digitalWrite(outputPin, LOW);
-    
-    // Reset the servo to the initial position
-    Servo1.write(0);
-    
-    // Log the angle to the Serial Monitor (optional)
-    Serial.println("No object detected. Servo reset to 5 degrees.");
-  }
-  delay(1000);
-  
+    // Read sensor values for entry and exit
+    int sensorValueIn = digitalRead(sensorPinIn);
+    int sensorValueOut = digitalRead(sensorPinOut);
 
-  if(sensor1Value == LOW) {
-  lcd.createChar(0, customCharF);
-  lcd.setCursor(0, 1);
-  lcd.write(0);
-  }else {
-  lcd.createChar(0, customCharE);
-  lcd.setCursor(0, 1);
-  lcd.write(0);
-  }
+    // Check if object is detected at entry or exit
+    if (sensorValueIn == LOW || sensorValueOut == LOW) {
+        // Move the servo to 90 degrees (open the gate)
+        Servo1.write(90);
+        Serial.println("Object detected! Gate opened.");
+    } else {
+        // Reset the servo to the initial position (close the gate)
+        Servo1.write(0);
+        Serial.println("No object detected. Gate closed.");
+    }
+
+    // Continuously check parking slots and update the LCD
+    checkSlot();
+
+    delay(100); // Small delay to make the LCD update readable
 }
