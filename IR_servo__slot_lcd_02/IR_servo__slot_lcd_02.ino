@@ -1,6 +1,9 @@
 #include <Servo.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <SoftwareSerial.h>
+// Connect RX, TX of Bluetooth module
+SoftwareSerial bluetooth(0, 1);  
 
 // Initialize LCD (address 0x27, 16 columns, 2 rows)
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -12,6 +15,7 @@ int sensorPinIn = 4;
 int sensorPinOut = 5;
 int sensorPin[6] = {6, 7, 8, 10, 11, 12}; // Initialize sensor pins
 int outputPin = 13; // LED output
+int totalSlots = 6;
 
 byte customCharF[] = {
     B11111,
@@ -42,7 +46,7 @@ void setup() {
     pinMode(sensorPinOut, INPUT);
 
     // Initialize sensor pins as input
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < totalSlots; i++) {
         pinMode(sensorPin[i], INPUT);
     }
 
@@ -52,6 +56,9 @@ void setup() {
     lcd.setCursor(4, 0);
     lcd.print("Welcome!");
     delay(2000); // Wait for 2 seconds
+
+    //Serial for Bluetooth
+    Serial.begin(9600);
 }
 
 void checkSlot() {
@@ -59,16 +66,27 @@ void checkSlot() {
     lcd.createChar(0, customCharF); // Occupied slot
     lcd.createChar(1, customCharE); // Free slot
 
+    int occupiedSlots = 0; // Initialize number of slots is taken
+    String freeSlotList = ""; //Create list of slots is free
+
     // Loop through all slots and update their status on the LCD
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < totalSlots; i++) {
         int sensorValue = digitalRead(sensorPin[i]);
         lcd.setCursor(i + 4 , 1); // Set cursor to the corresponding column for each slot
 
         if (sensorValue == LOW) {
             lcd.write(0); // Display occupied character
+            occupiedSlots++;
         } else {
             lcd.write(1); // Display free character
         }
+
+      int freeSlots = totalSlots - occupiedSlots // Calculate free slots
+      Serial.print("Free Slots: "); 
+      Serial.print(freeSlots); // Show total free slots
+      Serial.print(" (");
+      Serial.print(freeSlotList); // Show specific free slot
+      Serial.println(")");
     }
 }
 
