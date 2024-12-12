@@ -24,8 +24,8 @@ Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
 int servoPin = 9;
 int sensorPinIn = 4;
 int sensorPinOut = 5;
-int sensorPin[6] = {7, 8, 10, 11, 12, 13}; // Initialize sensor pins
-int totalSlots = 6;
+int sensorPin[5] = { 8, 10, 11, 12, 13}; // Initialize sensor pins
+int totalSlots = 5;
 int occupiedSlots = 0; // Initialize number of slots is taken
 
 byte customCharF[] = {
@@ -165,7 +165,7 @@ void checkSlot() {
     lcd.createChar(0, customCharF); // Occupied slot
     lcd.createChar(1, customCharE); // Free slot
 
-    int freeSlotList[6]; //Create list of slots is free
+    int freeSlotList[5]; //Create list of slots is free
 
     // Loop through all slots and update their status on the LCD
     for (int i = 0; i < totalSlots; i++) {
@@ -174,7 +174,7 @@ void checkSlot() {
 
         if (sensorValue == LOW) {
           lcd.write(0); 
-          if(occupiedSlots < 6)
+          if(occupiedSlots < 5)
             occupiedSlots++;
           freeSlotList[i] = 0;
         } else {
@@ -276,7 +276,7 @@ void loop() {
 
     // Check if object is detected at entry or exit
     if (sensorValueIn == LOW) {
-      if (occupiedSlots != 6) {
+      if (occupiedSlots != 5) {
         if (authentication()) {
           // Move the servo to 90 degrees (open the gate)
           lcd.print("Accepted");
