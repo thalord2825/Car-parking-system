@@ -12,7 +12,7 @@ SoftwareSerial mySerial(2, 3); // RX, TX
 #define mySerial Serial1
 #endif
 // Connect RX, TX of Bluetooth module
-SoftwareSerial bluetooth(0,1);  
+SoftwareSerial Bluetooth(6,7);  
 
 // Initialize LCD (address 0x27, 16 columns, 2 rows)
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -51,6 +51,7 @@ byte customCharE[] = {
 };
 // Function to enroll a new fingerprint
 uint8_t enrollFingerprint() {
+  lcd.print("Processing...");
   int p = -1;
 
   Serial.println("Ready to enroll a new fingerprint!");
@@ -192,6 +193,7 @@ void checkSlot() {
 
 
 void setup() {
+
     // Initialize the servo and the pins
     Servo1.attach(servoPin);
     pinMode(sensorPinIn, INPUT);
@@ -209,10 +211,11 @@ void setup() {
     lcd.print("Welcome!");
     delay(2000); // Wait for 2 seconds
 
-    //Serial for Bluetooth
     Serial.begin(9600);
     while (!Serial); // Wait for Serial Monitor to open
     Serial.println("Initializing fingerprint sensor...");
+    Bluetooth.begin(9600);  // Initialize Bluetooth communication
+    Serial.println("Waiting for commands...");
     
     finger.begin(57600);
     if (finger.verifyPassword()) {
@@ -226,6 +229,7 @@ void setup() {
 
 
 bool authentication() {
+  lcd.print("Processing...");
   int result = checkFingerprintStored();
   if (result > 0) {
     Serial.print("Fingerprint recognized with ID: ");
@@ -239,8 +243,33 @@ bool authentication() {
   return false;
 }
 
+void sendBluetooth(String status, int label){
+  if(label == 1) {
+    status = "1 " + status;
+  }else
+    status = "2 " + status;
+  Bluetooth.println(status);
+  Serial.println("Sent: " + status);
+}
+
+int receiveBluetooth(){
+  Serial.print("Waiting command: ");
+  while (!Bluetooth.available()) {
+    // Stay in this loop until data is received
+    //delay(100);
+  }
+    String command = Bluetooth.readString(); // Read the incoming message
+    Serial.print("Received command: ");
+    Serial.println(command);
+    if(command == "1"){
+      return 1;
+    } else if (command == "2"){
+      return 2;
+    } else return 0;
+}
 
 void loop() {
+  
     // Read sensor values for entry and exit
     int sensorValueIn = digitalRead(sensorPinIn);
     int sensorValueOut = digitalRead(sensorPinOut);
@@ -250,22 +279,43 @@ void loop() {
       if (occupiedSlots != 6) {
         if (authentication()) {
           // Move the servo to 90 degrees (open the gate)
+          lcd.print("Accepted");
+          //den.green
           Servo1.write(90);
-          Serial.println("Object detected! Gate opened.");
-
+          Serial.println("Finger detected! Gate opened.");
+          sendBluetooth("Welcome", 1);
+          delay(1000);
           // Continuously check parking slots and update the LCD
           checkSlot();
+          String emptySlots = "Slot: " + String(totalSlots - occupiedSlots);
+          sendBluetooth(emptySlots, 2);
         } else {
-          uint8_t enrollResult = enrollFingerprint();
-          if (enrollResult > 0) {
-            Serial.print("Enrollment successful with ID: ");
-            Serial.println(enrollResult);
-          } else {
-            Serial.println("Enrollment failed. Try again.");
+          sendBluetooth("Invalid",1);
+           delay(1000);
+          int command = receiveBluetooth();
+          delay(100);
+          switch(command){
+            case 1:
+            uint8_t enrollResult = enrollFingerprint();
+            if (enrollResult > 0) {
+              Serial.print("Enrollment successful with ID: ");
+              Serial.println(enrollResult);
+            } else {
+              Serial.println("Enrollment failed. Try again.");
+            }
+            break;
+            case 2: 
+              Serial.print("Canceled");
+              lcd.print("Canceled");
+              break;
+            default:
+              Serial.print("Error");
           }
+         
         }
       } else {
         Serial.println("None slot is empty");
+        sendBluetooth("Full slot",1);
       }
     } else { 
       // Reset the servo to the initial position (close the gate)
@@ -278,6 +328,8 @@ void loop() {
       Servo1.write(90);
       Serial.println("Object detected! Gate opened.");
       checkSlot();
+      String emptySlots = "Slot: " + String(totalSlots - occupiedSlots);
+      sendBluetooth(emptySlots, 2);
     } else {
       // Reset the servo to the initial position (close the gate)
       Servo1.write(0);
