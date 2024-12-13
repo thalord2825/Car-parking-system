@@ -2,28 +2,18 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <SoftwareSerial.h>
-#include <Adafruit_Fingerprint.h>
-#if (defined(__AVR__) || defined(ESP8266)) && !defined(__AVR_ATmega2560__)
-// For UNO and others without hardware serial
-#include <SoftwareSerial.h>
-SoftwareSerial mySerial(2, 3); // RX, TX
-#else
-// On boards with hardware serial (e.g., Mega), use hardware serial
-#define mySerial Serial1
-#endif
+
 // Initialize LCD (address 0x27, 16 columns, 2 rows)
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 Servo Servo1;
 SoftwareSerial Bluetooth(10,11);  
 
-uint8_t id;
-Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
 
 int servoPin = 9;
-int sensorPinIn = 4;
-int sensorPinOut = 5;
-int sensorPin[1] = {7}; // Initialize slots sensor pins
-int totalSlots = 1;
+int sensorPinIn = 2;
+int sensorPinOut = 3;
+int sensorPin[5] = {4,5,6,7,8}; // Initialize slots sensor pins
+int totalSlots = 5;
 int occupiedSlots = 0; 
 String slotRemain = "";
 
@@ -51,9 +41,6 @@ byte customCharE[] = {
 };
 
 
-uint8_t nextId = 1; // Initialize the ID counter
-
-
 void sendBluetooth(String status, int label){
   if(label == 1) {
     status = "1 " + status;
@@ -63,192 +50,63 @@ void sendBluetooth(String status, int label){
   Serial.println("Sent: " + status);
 }
 
-int receiveBluetooth() {
-  Serial.print("Waiting for command: ");
-  unsigned long startTime = millis(); // Record the start time
-  while (!Bluetooth.available()) {
-    if (millis() - startTime > 5000) { // 5-second timeout
-      Serial.println("Timeout waiting for Bluetooth command.");
-      return -1; // Indicate timeout
-    }
-  }
-  
-  String command = Bluetooth.readStringUntil('\n'); // Read until newline (or timeout internally)
-  command.trim(); // Remove any extra whitespace
-  Serial.print("Received command: ");
-  Serial.println(command);
-
-  // Validate and process the command
-  if (command == "1") {
-    return 1;
-  } else if (command == "2") {
-    return 2;
-  } else {
-    Serial.println("Invalid command received.");
-    return 0; // Indicate an invalid command
-  }
-}
-
-// function to enroll new user
-uint8_t enrollFingerprint() {
-  lcd.clear();
-  lcd.print("Processing...");
-  int p = -1;
-
-  // Automatically generate the next available ID
-  id = nextId;
-
-  Serial.println("Place your finger on the sensor...");
-  sendBluetooth("Place your finger on the sensor...", 1);
-  while (p != FINGERPRINT_OK) {
-    p = finger.getImage();
-    if (p == FINGERPRINT_NOFINGER) continue;
-    if (p != FINGERPRINT_OK) {
-      Serial.println("Error taking image. Try again.");
-      return -2;
-    }
-  }
-
-  p = finger.image2Tz(1);
-  if (p != FINGERPRINT_OK) {
-    Serial.println("Error converting image. Try again.");
-    return -3;
-  }
-
-  Serial.println("Remove your finger.");
-  sendBluetooth("Remove your finger", 1);
-  delay(2000);
-
-  Serial.println("Place the same finger again...");
-  sendBluetooth("Place the same finger again...", 1);
-
-  p = 0;
-  while (p != FINGERPRINT_OK) {
-    p = finger.getImage();
-    if (p == FINGERPRINT_NOFINGER) continue;
-    if (p != FINGERPRINT_OK) {
-      Serial.println("Error taking image. Try again.");
-      return -4;
-    }
-  }
-
-  p = finger.image2Tz(2);
-  if (p != FINGERPRINT_OK) {
-    Serial.println("Error converting second image. Try again.");
-    return -5;
-  }
-
-  p = finger.createModel();
-  if (p != FINGERPRINT_OK) {
-    Serial.println("Fingerprints did not match.");
-    return -6;
-  }
-
-  p = finger.storeModel(id);
-  if (p == FINGERPRINT_OK) {
-    Serial.println("Fingerprint stored successfully!");
-    nextId++; // Increment ID for the next enrollment
-    return id;
-  } else {
-    Serial.println("Error storing fingerprint.");
-return -7;
-  }
-}
-
-// Function to check if a fingerprint is stored in the database
-int checkFingerprintStored() {
-  Serial.println("Place your finger on the sensor...");
-  sendBluetooth("Place sensor...", 1);
-  uint8_t p = finger.getImage();
-  if (p == FINGERPRINT_NOFINGER) {
-    Serial.println("No finger detected.");
-    return -1;
-  } else if (p != FINGERPRINT_OK) {
-    Serial.println("Error taking image.");
-    return -2;
-  }
-
-  p = finger.image2Tz();
-  if (p != FINGERPRINT_OK) {
-    Serial.println("Error converting image.");
-    return -3;
-  }
-
-  p = finger.fingerSearch();
-  if (p == FINGERPRINT_OK) {
-    Serial.print("Fingerprint found! ID: ");
-    Serial.println(finger.fingerID);
-    return finger.fingerID;
-  } else if (p == FINGERPRINT_NOTFOUND) {
-    Serial.println("Fingerprint not found in the database.");
-    return 0;
-  } else {
-    Serial.println("Error searching for fingerprint.");
-    return -4;
-  }
-}
-
-
-// Check for authenticated user
-bool authentication() {
-  lcd.clear();
-  lcd.print("Processing..."); //  update lcd status
-  int result = checkFingerprintStored();
-  if (result > 0) {
-    Serial.print("Fingerprint recognized with ID: ");
-    Serial.println(result);
-    return true;
-  } else if (result == 0) {
-    Serial.println("Fingerprint not recognized.");
-  } else {
-    Serial.println("Error during fingerprint checking. Try again.");
-  }
-  return false;
-}
 
 // check remaining slots in parking lot
 void checkSlot() {
-    // Create the custom characters once
+    // Create the custom characters for the first time
     lcd.createChar(0, customCharF); // Occupied slot
     lcd.createChar(1, customCharE); // Free slot
 
     String tmp = "";
-    int freeSlotList[1]; //Create list of slots is free
+    int freeSlotList[5]; // Array to track which slots are free
     occupiedSlots = 0;
-    // Loop through all slots and update their status on the LCD
+
+    // Iterate over all parking slots
     for (int i = 0; i < totalSlots; i++) {
-        int sensorValue = digitalRead(sensorPin[i]);
-        lcd.setCursor(i, 1); // Set cursor to the corresponding column for each slot
+        int sensorValue = digitalRead(sensorPin[i]); // Read the sensor for this slot
+
+        // Set cursor position on LCD for this slot
+        lcd.setCursor(i, 1); // Draw each slot icon in the second row
 
         if (sensorValue == LOW) {
-          lcd.write(0); // Display non-free character
-          freeSlotList[i] = 0;
+            // Slot is occupied
+            lcd.write(0); // Display occupied character
+            lcd.print(0); // Display occupied character
+            freeSlotList[i] = 0; // Mark slot as occupied
         } else {
+            // Slot is free
             lcd.write(1); // Display free character
-            freeSlotList[i] = i + 1;
+            lcd.print(1); // Display occupied character
+            freeSlotList[i] = i + 1; // Mark slot as free
         }
+
+        // Debugging output to Serial Monitor
         Serial.print(freeSlotList[i]);
         tmp += freeSlotList[i];
     }
-      Serial.println(); 
 
-      // calculate occupied slots
-      for(int i = 0; i < totalSlots; i++ ) {
-        if(freeSlotList[i] == 0)
-          occupiedSlots++;
-      }
-      int freeSlots = totalSlots - occupiedSlots; // Calculate free slots
-      Serial.print("Free Slots: "); 
-      Serial.println(freeSlots); // Show total free slots  
-      Serial.print("No Free Slots: "); 
-      Serial.println(occupiedSlots); // Show total free slots  
+    Serial.println(); 
 
-      // if there is any changes in parking lot
-      if(tmp != slotRemain) {
-        sendBluetooth("Free-slot:" + String(freeSlots), 2 );
-        slotRemain = tmp;
-      }
+    // Calculate the number of occupied and free slots
+    for (int i = 0; i < totalSlots; i++) {
+        if (freeSlotList[i] == 0) {
+            occupiedSlots++;
+        }
+    }
+
+    int freeSlots = totalSlots - occupiedSlots; // Calculate free slots
+    Serial.print("Free Slots: ");
+    Serial.println(freeSlots);
+    Serial.print("Occupied Slots: ");
+    Serial.println(occupiedSlots);
+
+    // If there is any change in parking lot status, update Bluetooth
+    if (tmp != slotRemain) {
+        sendBluetooth("Free-slot:" + String(freeSlots), 2);
+        slotRemain = tmp; // Update the slot status cache
+    }
 }
+
 
 
 void setup() {
@@ -270,19 +128,12 @@ void setup() {
       pinMode(sensorPin[i], INPUT);
     }
 
-    // Update initialized lcd
-    checkSlot();
-
     Bluetooth.begin(9600);  
     sendBluetooth("Welcome", 1); // send welcome text via bluetooth
 
-    finger.begin(57600);
-      if (finger.verifyPassword()) {
-      Serial.println("Fingerprint sensor initialized.");
-    } else {
-      Serial.println("Error during fingerprint checking. Try again.");
-    }
-
+    
+    // Update initialized lcd
+    checkSlot();
 }
 
 // Loop for every frame
@@ -297,46 +148,16 @@ void loop() {
       // car goes in the parking lot
       if(occupiedSlots == totalSlots) {
         lcd.clear();
-        lcd.print("None empty slot");
+        lcd.print("Full slot");
+        sendBluetooth("Full slot", 1);
         return;
       }
       // if there is at least one empty slot in parking lot
       // do fingerprint authentication
-      if(authentication()) {
-        Servo1.write(90);
-        lcd.clear();
-        lcd.print("Come in");
-        sendBluetooth("Welcome", 1);
-      }else {
-        Serial.println("Authentication fail");
-        lcd.clear();
-        lcd.print("Invalid");
-        sendBluetooth("Invalid", 1);
-        delay(500); // wait for bluetooth transfer
-        int command = receiveBluetooth(); // receive choice from user
-          switch(command){
-            case 1:
-              uint8_t enrollResult = enrollFingerprint();
-              if (enrollResult > 0) {
-                Serial.print("Enrollment successful with ID: ");
-                Serial.println(enrollResult);
-                sendBluetooth("Enrollment successful", 1);
-              } else {
-                sendBluetooth("Enroll fail",1);
-                Serial.println("Enrollment failed. Try again.");
-              }
-            break;
-            case 2: 
-              Serial.print("Canceled");
-              lcd.clear();
-              lcd.print("Canceled");
-              break;
-            default:
-              Serial.print("Error");
-              lcd.clear();
-              lcd.print("Error");
-          }
-      }
+      Servo1.write(90);
+      lcd.clear();
+      lcd.print("Come in");
+      sendBluetooth("Welcome", 1);
     }else if(sensorValueOut == LOW) {
       // car goes out the parking lot
       Servo1.write(90);
@@ -350,7 +171,7 @@ void loop() {
     Serial.println("No object detected, rotate 0");
     lcd.clear();
     lcd.print("Welcome");
-    delay(2000); // delay for come out car
+    delay(1000); // delay for come out car
   }
 
   // Check for remaining empty slots
