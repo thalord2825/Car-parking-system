@@ -71,12 +71,10 @@ void checkSlot() {
         if (sensorValue == LOW) {
             // Slot is occupied
             lcd.write(0); // Display occupied character
-            lcd.print(0); // Display occupied character
             freeSlotList[i] = 0; // Mark slot as occupied
         } else {
             // Slot is free
             lcd.write(1); // Display free character
-            lcd.print(1); // Display occupied character
             freeSlotList[i] = i + 1; // Mark slot as free
         }
 
